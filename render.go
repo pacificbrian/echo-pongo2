@@ -1,6 +1,7 @@
 package echopongo2
 
 import (
+	"embed"
 	"fmt"
 	"io"
 	"os"
@@ -35,19 +36,10 @@ type Options struct {
 	Debug             bool
 	Source            RenderSource
 	MixManifestFolder string
+	UseEmbed          *embed.FS
 }
 
-// NewRenderer creates a new instance of Renderer
-func NewRenderer(baseDir string, opts ...Options) (*Renderer, error) {
-	// check if baseDir exists
-	fInfo, err := os.Lstat(baseDir)
-	if err != nil {
-		return nil, err
-	}
-	if fInfo.IsDir() == false {
-		return nil, fmt.Errorf("%s is not a directory", baseDir)
-	}
-
+func newRenderer(baseDir string, loader pongo2.TemplateLoader, opts []Options) (*Renderer, error) {
 	rdr := Renderer{}
 
 	if opts != nil {
@@ -62,11 +54,6 @@ func NewRenderer(baseDir string, opts ...Options) (*Renderer, error) {
 		rdr.source = i.Source
 	}
 
-	loader, err := pongo2.NewLocalFileSystemLoader(baseDir)
-	if err != nil {
-		return nil, err
-	}
-
 	rdr.TplSet = pongo2.NewSet("TplSet-"+filepath.Base(baseDir), loader)
 	rdr.TplSet.Debug = rdr.debug
 
@@ -74,6 +61,31 @@ func NewRenderer(baseDir string, opts ...Options) (*Renderer, error) {
 	rdr.globals = make(map[string]interface{})
 
 	return &rdr, nil
+}
+
+// NewRenderer creates a new instance of Renderer
+func NewRenderer(baseDir string, opts ...Options) (*Renderer, error) {
+	var loader pongo2.TemplateLoader
+
+	if opts != nil && opts[0].UseEmbed != nil {
+		loader = NewLoader(baseDir, opts[0].UseEmbed)
+	} else {
+		// check if baseDir exists
+		fInfo, err := os.Lstat(baseDir)
+		if err != nil {
+			return nil, err
+		}
+		if fInfo.IsDir() == false {
+			return nil, fmt.Errorf("%s is not a directory", baseDir)
+		}
+
+		loader, err = pongo2.NewLocalFileSystemLoader(baseDir)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return newRenderer(baseDir, loader, opts)
 }
 
 // Render implements echo.Render interface
